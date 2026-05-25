@@ -21,3 +21,4 @@ streamlit
 langgraph-checkpoint-sqlite
 ipykernel
 ddgs
+langchain_mcp_adapters
