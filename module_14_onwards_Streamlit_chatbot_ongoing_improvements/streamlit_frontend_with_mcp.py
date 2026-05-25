@@ -1,7 +1,8 @@
 import streamlit as st
-from langgraph_backend_with_mcp import chatbot, llm, retrieve_all_threads, retrieve_all_thread_titles, save_thread_title, delete_thread
+from langgraph_backend_with_mcp import chatbot, llm, retrieve_all_threads, retrieve_all_thread_titles, save_thread_title, delete_thread, submit_async_task
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from pydantic import BaseModel, Field
+import queue
 import uuid
 
 # **************************************** utility functions *************************
@@ -54,6 +55,13 @@ def render_tool_summary(tools):
             st.markdown(f"- `{tool['name']}` called {tool['count']} time(s)")
             for args in tool['args']:
                 st.json(args)
+
+def format_tool_label(tools):
+    # Build a short label for the compact live tool status box.
+    if not tools:
+        return "Tool finished"
+    label = ', '.join(f"{tool['name']} x{tool['count']}" for tool in tools)
+    return f"Tools used: {label}"
 
 def convert_messages_to_history(messages):
     # Convert LangGraph messages into Streamlit history and attach tool usage to assistant replies.
@@ -225,11 +233,31 @@ if user_input:
         status_holder = {"box": None}
 
         def ai_only_stream():
-            for message_chunk, metadata in chatbot.stream(
-                {"messages": [HumanMessage(content=user_input)]},
-                config=CONFIG,
-                stream_mode="messages"
-            ):
+            event_queue: queue.Queue = queue.Queue()
+
+            async def run_stream():
+                try:
+                    async for message_chunk, metadata in chatbot.astream(
+                        {"messages": [HumanMessage(content=user_input)]},
+                        config=CONFIG,
+                        stream_mode="messages"
+                    ):
+                        event_queue.put((message_chunk, metadata))
+                except Exception as exc:
+                    event_queue.put(("error", exc))
+                finally:
+                    event_queue.put(None)
+
+            submit_async_task(run_stream())
+
+            while True:
+                item = event_queue.get()
+                if item is None:
+                    break
+                message_chunk, metadata = item
+                if message_chunk == "error":
+                    raise metadata
+
                 if isinstance(message_chunk, ToolMessage):
                     # Show or update the tool status when the graph returns a tool message.
                     tool_name = getattr(message_chunk, "name", "tool")
@@ -255,11 +283,10 @@ if user_input:
         if status_holder["box"] is not None:
             # Mark the tool status complete after the assistant response finishes.
             status_holder["box"].update(
-                label="Tool finished",
+                label=format_tool_label(tools_used),
                 state="complete",
                 expanded=False,
             )
-            render_tool_summary(tools_used)
 
     # Save the complete assistant response after streaming finishes.
     st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message, 'tools': tools_used})
