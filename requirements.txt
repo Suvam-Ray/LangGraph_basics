@@ -22,3 +22,5 @@ langgraph-checkpoint-sqlite
 ipykernel
 ddgs
 langchain_mcp_adapters
+langgraph-checkpoint-postgres
+psycopg[binary,pool]
