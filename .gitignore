@@ -52,6 +52,9 @@ coverage.xml
 # pyenv
 .python-version
 
+# Chroma persistent vector store
+module_27_corrective_RAG/chroma_db/
+
 # Environments
 .env
 .venv
