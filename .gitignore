@@ -54,6 +54,7 @@ coverage.xml
 
 # Chroma persistent vector store
 module_27_corrective_RAG/chroma_db/
+module_28_self_reflection_RAG/chroma_db/
 
 # Environments
 .env
